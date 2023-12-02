@@ -19,6 +19,7 @@ class QbittorrentStatus:
     def __init__(self, listener, seeding=False, queued=False):
         self.__client = get_client()
         self.__listener = listener
+        self.upload_details = listener.upload_details
         self.__info = get_download(self.__client, f'{self.__listener.uid}')
         self.queued = queued
         self.seeding = seeding
@@ -119,4 +120,4 @@ class QbittorrentStatus:
                     del QbTorrents[self.__info.tags]
 
     def eng(self):
-        return EngineStatus.STATUS_QB
+        return EngineStatus().STATUS_QB

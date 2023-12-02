@@ -9,6 +9,7 @@ class QueueStatus:
         self.__size = size
         self.__gid = gid
         self.__listener = listener
+        self.upload_details = listener.upload_details
         self.__status = status
         self.message = listener.message
 
@@ -50,4 +51,4 @@ class QueueStatus:
 
 
     def eng(self):
-        return EngineStatus.STATUS_QUEUE
+        return EngineStatus().STATUS_QUEUE

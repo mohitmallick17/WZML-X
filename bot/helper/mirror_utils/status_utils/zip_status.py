@@ -12,6 +12,7 @@ class ZipStatus:
         self.__size = size
         self.__gid = gid
         self.__listener = listener
+        self.upload_details = listener.upload_details
         self.__uid = listener.uid
         self.__start_time = time()
         self.message = listener.message
@@ -72,4 +73,4 @@ class ZipStatus:
 
 
     def eng(self):
-        return EngineStatus.STATUS_ZIP
+        return EngineStatus().STATUS_ZIP

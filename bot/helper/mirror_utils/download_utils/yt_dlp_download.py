@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 from os import path as ospath, listdir
-from random import SystemRandom
-from string import ascii_letters, digits
+from secrets import token_hex
 from logging import getLogger
 from yt_dlp import YoutubeDL, DownloadError
 from re import search as re_search
 
-from bot import download_dict_lock, download_dict, non_queued_dl, queue_dict_lock, config_dict
+from bot import download_dict_lock, download_dict, non_queued_dl, queue_dict_lock
 from bot.helper.telegram_helper.message_utils import sendStatusMessage
 from ..status_utils.yt_dlp_download_status import YtDlpDownloadStatus
 from bot.helper.mirror_utils.status_utils.queue_status import QueueStatus
@@ -67,10 +66,10 @@ class YoutubeDLHelper:
                      'overwrites': True,
                      'writethumbnail': True,
                      'trim_file_name': 220,
-                     'retry_sleep_functions': {'http': lambda x: 2,
-                                               'fragment': lambda x: 2,
-                                               'file_access': lambda x: 2,
-                                               'extractor': lambda x: 2}}
+                     'retry_sleep_functions': {'http': lambda n: 3,
+                                               'fragment': lambda n: 3,
+                                               'file_access': lambda n: 3,
+                                               'extractor': lambda n: 3}}
 
     @property
     def download_speed(self):
@@ -112,7 +111,7 @@ class YoutubeDLHelper:
                 elif d.get('total_bytes_estimate'):
                     self.__size = d['total_bytes_estimate']
                 self.__downloaded_bytes = d['downloaded_bytes']
-                self.__eta = d.get('eta', '-')
+                self.__eta = d.get('eta', '-') or '-'
             try:
                 self.__progress = (self.__downloaded_bytes / self.__size) * 100
             except:
@@ -151,11 +150,10 @@ class YoutubeDLHelper:
                         self.__size += entry['filesize_approx']
                     elif 'filesize' in entry:
                         self.__size += entry['filesize']
-                    if not name:
+                    if not self.name:
                         outtmpl_ = '%(series,playlist_title,channel)s%(season_number& |)s%(season_number&S|)s%(season_number|)02d.%(ext)s'
-                        name, ext = ospath.splitext(
+                        self.name, ext = ospath.splitext(
                             ydl.prepare_filename(entry, outtmpl=outtmpl_))
-                        self.name = name
                         if not self.__ext:
                             self.__ext = ext
             else:
@@ -194,9 +192,7 @@ class YoutubeDLHelper:
             self.opts['ignoreerrors'] = True
             self.is_playlist = True
 
-        self.__gid = ''.join(SystemRandom().choices(
-            ascii_letters + digits, k=10))
-
+        self.__gid = token_hex(5)
         await self.__onDownloadStart()
 
         self.opts['postprocessors'] = [
@@ -241,24 +237,24 @@ class YoutubeDLHelper:
         else:
             self.opts['outtmpl'] = {'default': f"{path}/{self.name}",
                                     'thumbnail': f"{path}/yt-dlp-thumb/{base_name}.%(ext)s"}
-            self.name = base_name
+
+        if qual.startswith('ba/b'):
+            self.name = f'{base_name}{self.__ext}'
 
         if self.__listener.isLeech:
             self.opts['postprocessors'].append(
                 {'format': 'jpg', 'key': 'FFmpegThumbnailsConvertor', 'when': 'before_dl'})
-        if self.__ext in ['.mp3', '.mkv', '.mka', '.ogg', '.opus', '.flac', '.m4a', '.mp4', '.mov']:
+        if self.__ext in ['.mp3', '.mkv', '.mka', '.ogg', '.opus', '.flac', '.m4a', '.mp4', '.mov', 'm4v']:
             self.opts['postprocessors'].append(
                 {'already_have_thumbnail': self.__listener.isLeech, 'key': 'EmbedThumbnail'})
         elif not self.__listener.isLeech:
             self.opts['writethumbnail'] = False
 
-        msg, button = await stop_duplicate_check(name, self.__listener)
+        msg, button = await stop_duplicate_check(self.name, self.__listener)
         if msg:
             await self.__listener.onDownloadError(msg, button)
             return
-        if limit_exceeded := await limit_checker(self.__size, self.__listener, isYtdlp=True):
-            if self.playlist_count > config_dict['PLAYLIST_LIMIT']:
-                limit_exceeded += f'\nYour Playlist has {self.playlist_count} files'
+        if limit_exceeded := await limit_checker(self.__size, self.__listener, isYtdlp=True, isPlayList=self.playlist_count):
             await self.__listener.onDownloadError(limit_exceeded)
             return
         added_to_queue, event = await is_queued(self.__listener.uid)
@@ -291,11 +287,13 @@ class YoutubeDLHelper:
         options = options.split('|')
         for opt in options:
             key, value = map(str.strip, opt.split(':', 1))
+            if key == 'format' and value.startswith('ba/b-'):
+                continue
             if value.startswith('^'):
                 if '.' in value or value == '^inf':
-                    value = float(value.split('^')[1])
+                    value = float(value.split('^', 1)[1])
                 else:
-                    value = int(value.split('^')[1])
+                    value = int(value.split('^', 1)[1])
             elif value.lower() == 'true':
                 value = True
             elif value.lower() == 'false':
